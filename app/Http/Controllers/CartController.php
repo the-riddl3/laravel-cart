@@ -59,7 +59,7 @@ class CartController extends Controller
         $user = User::query()->first();
         return response()->json([
             'products' => CartResource::collection($user->cartItems),
-            'discount' => (new CartService($user))->calculateDiscountSlow(),
+            'discount' => (new CartService($user))->calculateDiscountFast(),
         ]);
     }
 }

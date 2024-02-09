@@ -6,6 +6,9 @@ use App\Models\Cart;
 use App\Models\Product;
 use App\Models\ProductGroup;
 use App\Models\User;
+use Illuminate\Database\Query\Builder;
+use Illuminate\Database\Query\JoinClause;
+use Illuminate\Support\Facades\DB;
 
 class CartService
 {
@@ -41,7 +44,7 @@ class CartService
                 ->whereIn('product_id', $productGroup->groupItems->pluck('product_id'))
                 ->get();
 
-            if($matching->count() === $groupCount) {
+            if ($matching->count() === $groupCount) {
                 $minimumQuantity = $matching->pluck('quantity')->min();
                 $discount +=
                     $matching->map(fn(Cart $cartItem) => $cartItem->product->price)->sum()
@@ -51,6 +54,22 @@ class CartService
         }
 
         return $discount;
+    }
+
+    public function calculateDiscountFast(): float
+    {
+        $user = $this->user;
+        return DB::table('product_groups as pg')
+            ->select(DB::raw("SUM(p.price) * (pg.discount / 100) * MIN(c.quantity) as discount"))
+            ->join('product_group_items as pgi', 'pg.group_id', 'pgi.group_id')
+            ->join('products as p', 'pgi.product_id', 'p.product_id')
+            ->join('carts as c', function (JoinClause $join) use ($user) {
+                $join->on('c.product_id', 'p.product_id')
+                    ->where('c.user_id', $user->id);
+            })
+            ->groupBy('pg.group_id')
+            ->havingRaw("COUNT(pg.group_id) = (select count(group_id) from product_group_items where group_id = pg.group_id)")
+            ->sum('discount');
     }
 
     public function updateQuantity(Product $product, int $quantity): void
